@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Form = require("../models/Form");
 const Team = require("../models/Team");
 const Invitation = require("../models/Invitation");
+const Assignment = require("../models/Assignment");
 const ApiError = require("../utils/ApiError");
 const validateCollaborationInput = require("../utils/validateCollaborationInput");
 
@@ -31,7 +32,7 @@ function buildTeamMembers(leader, members) {
 async function buildCollaborationDocs(data, session) {
   const [form] = await Form.create(
     [{ sourceUrl: data.sourceUrl, sourceType: data.sourceType, fields: data.fields }],
-    { session }
+    { session, ordered: true }
   );
 
   const teamMembers = buildTeamMembers(data.leader, data.members);
@@ -39,23 +40,37 @@ async function buildCollaborationDocs(data, session) {
 
   const [team] = await Team.create(
     [{ formId: form._id, ownerId: leaderMember._id, members: teamMembers }],
-    { session }
+    { session, ordered: true }
   );
 
   const nonLeaderMembers = team.members.filter((m) => !m.isLeader);
-  const invitations = nonLeaderMembers.length
-    ? await Invitation.create(
-        nonLeaderMembers.map((m) => ({
-          formId: form._id,
-          memberId: m._id,
-          email: m.email,
-          status: "pending",
-        })),
-        { session }
-      )
-    : [];
+  let invitations = [];
+  let assignments = [];
 
-  return { form, team, invitations };
+  if (nonLeaderMembers.length) {
+    invitations = await Invitation.create(
+      nonLeaderMembers.map((m) => ({
+        formId: form._id,
+        memberId: m._id,
+        email: m.email,
+        status: "pending",
+      })),
+      { session, ordered: true }
+    );
+
+    assignments = await Assignment.create(
+      form.fields.map((f, i) => ({
+        formId: form._id,
+        fieldId: f.fieldId,
+        memberId: nonLeaderMembers[i % nonLeaderMembers.length]._id,
+        source: "leader",
+        reason: "MVP Default Assignment"
+      })),
+      { session, ordered: true }
+    );
+  }
+
+  return { form, team, invitations, assignments };
 }
 
 // Same creation sequence, but for a MongoDB deployment that doesn't support
@@ -66,6 +81,7 @@ async function buildCollaborationDocsManual(data) {
   let form = null;
   let team = null;
   let invitations = [];
+  let assignments = [];
 
   try {
     [form] = await Form.create([
@@ -87,12 +103,23 @@ async function buildCollaborationDocsManual(data) {
           status: "pending",
         }))
       );
+
+      assignments = await Assignment.create(
+        form.fields.map((f, i) => ({
+          formId: form._id,
+          fieldId: f.fieldId,
+          memberId: nonLeaderMembers[i % nonLeaderMembers.length]._id,
+          source: "leader",
+          reason: "MVP Default Assignment"
+        }))
+      );
     }
 
-    return { form, team, invitations };
+    return { form, team, invitations, assignments };
   } catch (err) {
     await Promise.allSettled(
       [
+        assignments.length && Assignment.deleteMany({ _id: { $in: assignments.map((a) => a._id) } }),
         invitations.length && Invitation.deleteMany({ _id: { $in: invitations.map((i) => i._id) } }),
         team && Team.deleteOne({ _id: team._id }),
         form && Form.deleteOne({ _id: form._id }),
