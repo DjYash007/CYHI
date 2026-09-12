@@ -5,9 +5,9 @@ const { Schema } = mongoose;
 // canonical "memberId" referenced by Assignment and Response documents.
 const memberSchema = new Schema(
   {
-    name: { type: String, required: true, trim: true },
+    name: { type: String, trim: true, default: "" },
     email: { type: String, required: true, trim: true, lowercase: true },
-    role: { type: String, trim: true, default: "" }, // e.g. "backend", "frontend", "design" — used as an AI-assignment hint, not a hard rule
+    role: { type: String, required: true, trim: true },
     isLeader: { type: Boolean, default: false },
   },
   { timestamps: true }
