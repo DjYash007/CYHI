@@ -1,21 +1,14 @@
-const { Resend } = require("resend");
-const ApiError = require("../utils/ApiError");
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD
+  }
+});
 
 const INVITATION_SUBJECT = "You've been invited to collaborate on a form";
-
-let customSender = null;
-
-function setCustomSender(fn) {
-  customSender = fn;
-}
-
-function resetCustomSender() {
-  customSender = null;
-}
-
-function hasCustomSender() {
-  return typeof customSender === "function";
-}
 
 function buildInvitationText(joinUrl) {
   return `You have been invited to fill your part of a form.\n\nOpen your form:\n${joinUrl}`;
@@ -25,53 +18,44 @@ function buildInvitationHtml(joinUrl) {
   return `<p>You have been invited to fill your part of a form.</p><p>Open your form:<br/><a href="${joinUrl}">${joinUrl}</a></p>`;
 }
 
-function verifyConfig() {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
+async function sendInvitationEmail({ to, joinUrl }) {
+  console.log(`[CYHI EMAIL] Preparing invitation email`);
+  console.log(`[CYHI EMAIL] Recipient: ${to}`);
+  console.log(`[CYHI EMAIL] Sender: ${process.env.GMAIL_USER}`);
+  console.log(`[CYHI EMAIL] Subject: ${INVITATION_SUBJECT}`);
 
-  if (!apiKey || !apiKey.trim()) {
-    throw new ApiError(500, "Email configuration error: RESEND_API_KEY is not set.");
-  }
-  if (!from || !from.trim()) {
-    throw new ApiError(500, "Email configuration error: EMAIL_FROM is not set.");
-  }
+  try {
+    const result = await transporter.sendMail({
+      from: process.env.GMAIL_USER,
+      to, // Correctly use the passed argument 'to'
+      subject: INVITATION_SUBJECT,
+      text: buildInvitationText(joinUrl),
+      html: buildInvitationHtml(joinUrl)
+    });
 
-  return {
-    apiKey: apiKey.trim(),
-    from: from.trim(),
-  };
+    console.log(`[CYHI EMAIL] Gmail/Nodemailer response: accepted=${result.accepted.length}, rejected=${result.rejected.length}, messageId=${result.messageId}`);
+    return result;
+  } catch (error) {
+    console.error(`[CYHI EMAIL] Error sending email via Nodemailer: ${error.message}`);
+    throw error;
+  }
 }
 
-async function sendInvitationEmail({ to, joinUrl }) {
-  if (customSender) {
-    return await customSender({ to, joinUrl });
+async function verifyTransporter() {
+  try {
+    await transporter.verify();
+    console.log("[CYHI EMAIL] SMTP connection verified successfully.");
+    return true;
+  } catch (error) {
+    console.error("[CYHI EMAIL] SMTP verification failed:", error.message);
+    return false;
   }
-
-  const { apiKey, from } = verifyConfig();
-  const resend = new Resend(apiKey);
-
-  const result = await resend.emails.send({
-    from,
-    to,
-    subject: INVITATION_SUBJECT,
-    text: buildInvitationText(joinUrl),
-    html: buildInvitationHtml(joinUrl),
-  });
-
-  if (result.error) {
-    throw new Error(result.error.message || "Failed to send email via Resend.");
-  }
-
-  return result.data;
 }
 
 module.exports = {
   INVITATION_SUBJECT,
   buildInvitationText,
   buildInvitationHtml,
-  verifyConfig,
   sendInvitationEmail,
-  setCustomSender,
-  resetCustomSender,
-  hasCustomSender,
+  verifyTransporter
 };
