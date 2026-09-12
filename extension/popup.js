@@ -97,7 +97,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------- Extraction & Messaging Helpers ----------
   function sendExtractMessage(tabId) {
     return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error("Extraction timed out. The page might be incompatible or restricted."));
+      }, 3000);
+
       chrome.tabs.sendMessage(tabId, { type: "CYHI_EXTRACT_FIELDS" }, (response) => {
+        clearTimeout(timeoutId);
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
@@ -108,32 +113,50 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function injectContentScript(tabId) {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    console.log("[CYHI POPUP] Injecting content script into tab", tabId);
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    } catch (e) {
+      console.error("[CYHI POPUP] Injection failed:", e);
+      throw new Error("Cannot access this page. Is it a restricted Chrome page?");
+    }
   }
 
   async function extractFromActiveTab() {
+    console.log("[CYHI POPUP] Querying active tab...");
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("No active tab found.");
+    console.log("[CYHI POPUP] Active tab:", tab.id, tab.url);
 
     try {
-      return await sendExtractMessage(tab.id);
+      console.log("[CYHI POPUP] Sending extraction message (attempt 1)");
+      const res = await sendExtractMessage(tab.id);
+      console.log("[CYHI POPUP] Extraction response (attempt 1):", res);
+      return res;
     } catch (err) {
+      console.log("[CYHI POPUP] Attempt 1 failed:", err.message);
       await injectContentScript(tab.id);
-      return await sendExtractMessage(tab.id);
+      console.log("[CYHI POPUP] Sending extraction message (attempt 2)");
+      const res2 = await sendExtractMessage(tab.id);
+      console.log("[CYHI POPUP] Extraction response (attempt 2):", res2);
+      return res2;
     }
   }
 
   // ---------- Send Invitations Flow ----------
   sendBtn.addEventListener('click', async () => {
+    console.log("[CYHI POPUP] Send button clicked");
     if (members.length === 0) return;
     
     sendBtn.disabled = true;
-    sendBtn.textContent = 'Extracting & Sending...';
+    sendBtn.textContent = 'Extracting...';
     hideError();
     resetStatus();
 
     try {
+      console.log("[CYHI POPUP] Starting extraction...");
       const response = await extractFromActiveTab();
+      console.log("[CYHI POPUP] Extraction successful");
 
       if (!response || !response.ok) {
         throw new Error(response?.error || "Unable to read fields from this page. Please reload the page and try again.");
@@ -143,6 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!extractedForm || !extractedForm.fields || extractedForm.fields.length === 0) {
         throw new Error("No form fields detected on this page.");
       }
+
+      console.log("[CYHI POPUP] Changing button text to 'Creating Collaboration...'");
+      sendBtn.textContent = 'Creating Collaboration...';
 
       const payload = {
         leader: {
@@ -156,49 +182,119 @@ document.addEventListener('DOMContentLoaded', () => {
         members: members
       };
 
-      console.log("[CYHI] Final collaboration payload:", payload);
+      console.log("[CYHI POPUP] Creating collaboration with payload:", payload);
 
       const res = await fetch("http://localhost:5000/api/collaborations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+      
+      console.log("[CYHI POPUP] Collaboration HTTP status:", res.status);
 
       let responseData;
+
       try {
-        responseData = await res.json();
+          responseData = await res.json();
       } catch (jsonErr) {
-        throw new Error(res.status >= 500 ? "CYHI server error. Check the backend console." : "Unable to send invitations. Please try again.");
+          throw new Error(
+              res.status >= 500
+                  ? "CYHI server error. Check the backend console."
+                  : "Invalid response from CYHI server."
+          );
       }
-      
+
+      // Check FIRST API
       if (!res.ok) {
-        let errorMsg = "Unable to send invitations. Please try again.";
-        if (responseData.details && Array.isArray(responseData.details)) {
-          errorMsg = responseData.details.join(", ");
-        } else if (responseData.error) {
-          errorMsg = responseData.error;
-        }
-        throw new Error(errorMsg);
+          let errorMsg = "Unable to create collaboration.";
+
+          if (responseData.details && Array.isArray(responseData.details)) {
+              errorMsg = responseData.details.join(", ");
+          } else if (responseData.error) {
+              errorMsg = responseData.error;
+          }
+
+          throw new Error(errorMsg);
       }
 
-      console.log("[CYHI] Backend response:", responseData);
+      console.log("[CYHI] Collaboration created:", responseData);
 
-      statusMessage.textContent = 'Invitations created successfully.';
-      statusMessage.className = 'text-xs text-center font-medium p-2 mb-4 rounded bg-green-50 text-green-700 border border-green-200';
-      statusMessage.classList.remove('hidden');
-      
+      // Get the REAL team ID
+      const teamId = responseData.teamId;
+
+      if (!teamId) {
+          throw new Error(
+              "Collaboration was created, but the backend did not return a teamId."
+          );
+      }
+
+      console.log("[CYHI POPUP] Team ID:", teamId);
+      console.log("[CYHI POPUP] Sending invitations...");
+      sendBtn.textContent = 'Sending Invitations...';
+
+      // STEP 2: Actually send invitations
+      const sendRes = await fetch(
+          `http://localhost:5000/api/collaborations/${encodeURIComponent(teamId)}/invitations/send`,
+          {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json"
+              }
+          }
+      );
+
+      let sendData;
+
+      try {
+          sendData = await sendRes.json();
+      } catch (jsonErr) {
+          throw new Error(
+              sendRes.status >= 500
+                  ? "Email service/backend error. Check the backend console."
+                  : "Invalid response from invitation service."
+          );
+      }
+
+      console.log("[CYHI] Invitation send response:", sendData);
+
+      // Check SECOND API
+      if (!sendRes.ok) {
+          throw new Error(
+              sendData.error ||
+              sendData.message ||
+              "Failed to send invitations."
+          );
+      }
+
+      // Check application-level failures
+      if (sendData.failed && sendData.failed > 0) {
+          throw new Error(
+              `${sendData.failed} invitation(s) failed to send.`
+          );
+      }
+
+      console.log("[CYHI] Invitations sent successfully:", sendData);
+
+      statusMessage.textContent = "Invitations sent successfully.";
+      statusMessage.className =
+          "text-xs text-center font-medium p-2 mb-4 rounded bg-green-50 text-green-700 border border-green-200";
+      statusMessage.classList.remove("hidden");
+
+      sendBtn.textContent = 'Invitations Sent';
+
       // Disable inputs after successful mock send
       addBtn.disabled = true;
       emailInput.disabled = true;
       roleInput.disabled = true;
     } catch (err) {
-      console.error("[CYHI] Error:", err);
-      // Fallback for fetch failure where it completely throws (e.g., server offline)
-      const errorMsg = err.message === "Failed to fetch" || err.message.includes("NetworkError")
+      console.error("[CYHI POPUP] Error:", err);
+      const errMsg = (err && err.message) ? err.message : String(err);
+      
+      const finalMsg = errMsg === "Failed to fetch" || errMsg.includes("NetworkError")
         ? "Cannot connect to CYHI server. Make sure the backend is running."
-        : err.message;
+        : errMsg;
         
-      statusMessage.textContent = errorMsg;
+      statusMessage.textContent = finalMsg;
       statusMessage.className = 'text-xs text-center font-medium p-2 mb-4 rounded bg-red-50 text-red-700 border border-red-200';
       statusMessage.classList.remove('hidden');
       sendBtn.disabled = false;

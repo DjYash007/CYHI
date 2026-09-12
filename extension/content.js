@@ -134,13 +134,18 @@ function extractFields() {
   };
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "CYHI_EXTRACT_FIELDS") {
-    try {
-      sendResponse({ ok: true, data: extractFields() });
-    } catch (err) {
-      sendResponse({ ok: false, error: err.message });
+if (!window.CYHI_CONTENT_SCRIPT_LOADED) {
+  window.CYHI_CONTENT_SCRIPT_LOADED = true;
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "CYHI_EXTRACT_FIELDS") {
+      try {
+        const data = extractFields();
+        sendResponse({ ok: true, data });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return false; // Synchronous response
     }
-  }
-  return true; // Keep message channel open for async response
-});
+  });
+}
