@@ -6,6 +6,9 @@ const Assignment = require("../models/Assignment");
 const ApiError = require("../utils/ApiError");
 const validateCollaborationInput = require("../utils/validateCollaborationInput");
 const emailService = require("../services/emailService");
+const nodemailer = require("nodemailer");
+
+
 
 function buildJoinUrl(token) {
   const base = process.env.FRONTEND_BASE_URL || "http://localhost:3000";
@@ -234,7 +237,7 @@ async function getCollaboration(req, res, next) {
 function sanitizeErrorMessage(msg) {
   if (!msg) return "Failed to send email.";
   let cleaned = String(msg);
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = process.env.GMAIL_APP_PASSWORD;
   if (apiKey && apiKey.trim()) {
     cleaned = cleaned.replaceAll(apiKey.trim(), "[REDACTED]");
   }
@@ -275,9 +278,7 @@ async function sendInvitations(req, res, next) {
       });
     }
 
-    if (!emailService.hasCustomSender()) {
-      emailService.verifyConfig();
-    }
+    
 
     let sent = 0;
     let failed = 0;

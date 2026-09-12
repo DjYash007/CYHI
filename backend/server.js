@@ -7,6 +7,7 @@ const { Server } = require("socket.io");
 const connectDB = require("./config/db");
 const collaborationsRouter = require("./routes/collaborations");
 const joinRouter = require("./routes/join");
+const formsRouter = require("./routes/forms");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -29,6 +30,7 @@ app.get("/", (_req, res) => {
 
 app.use("/api/collaborations", collaborationsRouter);
 app.use("/api/join", joinRouter);
+app.use("/api/forms", formsRouter);
 
 app.use(errorHandler);
 

@@ -60,21 +60,19 @@ async function submitResponse(req, res, next) {
     const assignments = await Assignment.find({ formId: invitation.formId, memberId: invitation.memberId }).lean();
     const assignedFieldIds = new Set(assignments.map(a => a.fieldId));
 
-    const ops = responses.map(r => {
+    const promises = responses.map(r => {
       if (!assignedFieldIds.has(r.fieldId)) {
         throw new ApiError(403, `Not authorized to submit fieldId: ${r.fieldId}`);
       }
-      return {
-        updateOne: {
-          filter: { formId: invitation.formId, fieldId: r.fieldId, memberId: invitation.memberId },
-          update: { $set: { value: r.value } },
-          upsert: true
-        }
-      };
+      return Response.findOneAndUpdate(
+        { formId: invitation.formId, fieldId: r.fieldId, memberId: invitation.memberId },
+        { $set: { value: r.value } },
+        { upsert: true, new: true, runValidators: true }
+      );
     });
 
-    if (ops.length > 0) {
-      await Response.bulkWrite(ops);
+    if (promises.length > 0) {
+      await Promise.all(promises);
     }
     
     await Invitation.updateOne({ _id: invitation._id }, { status: "completed" });
