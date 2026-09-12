@@ -5,6 +5,8 @@ const cors = require("cors");
 const express = require("express");
 const { Server } = require("socket.io");
 const connectDB = require("./config/db");
+const collaborationsRouter = require("./routes/collaborations");
+const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +25,10 @@ app.use(express.json());
 app.get("/", (_req, res) => {
   res.json({ message: "CYHI backend is running" });
 });
+
+app.use("/api/collaborations", collaborationsRouter);
+
+app.use(errorHandler);
 
 io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);

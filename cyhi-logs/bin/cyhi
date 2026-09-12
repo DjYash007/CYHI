@@ -5,7 +5,7 @@ Append-only JSONL turn log + shared team state + a handoff note.
 Stdlib only, Python 3.8+. Any agent that can run a command can comply.
 """
 
-from __future__ import annotations
+from __future__ import annotations  
 
 import argparse
 import json
