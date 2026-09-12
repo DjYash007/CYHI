@@ -4,6 +4,7 @@ const http = require("http");
 const cors = require("cors");
 const express = require("express");
 const { Server } = require("socket.io");
+const connectDB = require("./config/db");
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +32,15 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Backend listening on port ${PORT}`);
+async function start() {
+  await connectDB();
+
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Backend listening on port ${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error("Failed to start server:", err.message);
+  process.exit(1);
 });
