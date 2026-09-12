@@ -1,0 +1,36 @@
+require("dotenv").config();
+
+const http = require("http");
+const cors = require("cors");
+const express = require("express");
+const { Server } = require("socket.io");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+
+app.get("/", (_req, res) => {
+  res.json({ message: "CYHI backend is running" });
+});
+
+io.on("connection", (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
+  socket.on("disconnect", (reason) => {
+    console.log(`Socket disconnected: ${socket.id} (${reason})`);
+  });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Backend listening on port ${PORT}`);
+});
