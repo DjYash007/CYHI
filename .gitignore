@@ -5,3 +5,8 @@ dist/
 !.env.example
 *.log
 .DS_Store
+cyhi-logs/.local/
+backend/.env
+cyhi-skills.zip
+cyhi-backend-models.patch
+.claude/
