@@ -1,3 +1,4 @@
+cyhi-logs/.local/
 node_modules/
 dist/
 .env
@@ -5,6 +6,10 @@ dist/
 !.env.example
 *.log
 .DS_Store
+CLAUDE.md
+.replit
+replit.md
+.claude
 cyhi-logs/.local/
 backend/.env
 cyhi-skills.zip
