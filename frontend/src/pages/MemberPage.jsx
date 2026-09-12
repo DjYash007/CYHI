@@ -1,73 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 
-// Mock Invitation Data based on prompt
-const mockInvitation = {
-  formId: "mock-form-id",
-  memberId: "mock-member-id",
-  token: "mock-token-123",
-  fields: [
-    {
-      fieldId: "f1",
-      label: "Full Name",
-      type: "text",
-      required: true
-    },
-    {
-      fieldId: "f2",
-      label: "Email",
-      type: "email",
-      required: true
-    },
-    {
-      fieldId: "f3",
-      label: "GitHub Profile",
-      type: "url",
-      required: false
-    },
-    {
-      fieldId: "f4",
-      label: "College Name",
-      type: "text",
-      required: true
-    },
-    {
-      fieldId: "f5",
-      label: "Short Bio",
-      type: "textarea",
-      required: false
-    }
-  ]
-};
+
 
 export default function MemberPage() {
   const { token } = useParams();
   
-  // In a real app, we would fetch the invitation details based on `token`
-  // using something like: fetch(`/api/join/${token}`)
-  const invitation = mockInvitation;
-  
+  const [invitation, setInvitation] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function fetchInvitation() {
+      try {
+        const res = await fetch(`http://localhost:5000/api/join/${token}`);
+        if (!res.ok) {
+          throw new Error("Unable to load invitation. It may be invalid or expired.");
+        }
+        const data = await res.json();
+        setInvitation(data);
+      } catch (err) {
+        setStatus({ type: 'error', message: err.message });
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchInvitation();
+  }, [token]);
 
   const handleInputChange = (fieldId, value) => {
     setFormData(prev => ({
       ...prev,
       [fieldId]: value
     }));
-    // Clear error for this field
     if (errors[fieldId]) {
       setErrors(prev => ({ ...prev, [fieldId]: null }));
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus({ type: '', message: '' });
     
-    // Validate
     const newErrors = {};
     let hasErrors = false;
     
@@ -86,26 +63,41 @@ export default function MemberPage() {
 
     setIsSubmitting(true);
     
-    // Build the response object required by the backend
     const responses = invitation.fields.map(field => ({
       fieldId: field.fieldId,
       value: formData[field.fieldId] || ""
     }));
 
-    const responsePayload = {
-      formId: invitation.formId,
-      memberId: invitation.memberId,
-      responses: responses
-    };
-
-    console.log("Submitted Response Payload:", JSON.stringify(responsePayload, null, 2));
-
-    // Simulate backend call
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      const res = await fetch(`http://localhost:5000/api/join/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ responses })
+      });
+      
+      if (!res.ok) {
+        throw new Error("Unable to submit response. Please try again.");
+      }
+      
       setStatus({ type: 'success', message: 'Your information has been submitted successfully.' });
-    }, 800);
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!invitation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-red-50 p-4 rounded-md text-red-800">{status.message}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
