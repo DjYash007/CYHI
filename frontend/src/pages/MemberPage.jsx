@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function MemberPage() {
   const { token } = useParams();
   
@@ -14,7 +16,7 @@ export default function MemberPage() {
   useEffect(() => {
     async function fetchInvitation() {
       try {
-        const res = await fetch(`http://localhost:5000/api/join/${token}`);
+        const res = await fetch(`${API_BASE}/api/join/${token}`);
         if (!res.ok) {
           throw new Error("Unable to load invitation. It may be invalid or expired.");
         }
@@ -74,7 +76,7 @@ export default function MemberPage() {
     })) : [];
 
     try {
-      const res = await fetch(`http://localhost:5000/api/join/${token}/responses`, {
+      const res = await fetch(`${API_BASE}/join/${token}/responses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ responses })
