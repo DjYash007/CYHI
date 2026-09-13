@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 const Form = require("../models/Form");
 const Team = require("../models/Team");
 const Invitation = require("../models/Invitation");
-const Assignment = require("../models/Assignment");
 const ApiError = require("../utils/ApiError");
 const validateCollaborationInput = require("../utils/validateCollaborationInput");
 const emailService = require("../services/emailService");
@@ -49,7 +48,6 @@ async function buildCollaborationDocs(data, session) {
 
   const nonLeaderMembers = team.members.filter((m) => !m.isLeader);
   let invitations = [];
-  let assignments = [];
 
   if (nonLeaderMembers.length) {
     invitations = await Invitation.create(
@@ -61,20 +59,9 @@ async function buildCollaborationDocs(data, session) {
       })),
       { session, ordered: true }
     );
-
-    assignments = await Assignment.create(
-      form.fields.map((f, i) => ({
-        formId: form._id,
-        fieldId: f.fieldId,
-        memberId: nonLeaderMembers[i % nonLeaderMembers.length]._id,
-        source: "leader",
-        reason: "MVP Default Assignment"
-      })),
-      { session, ordered: true }
-    );
   }
 
-  return { form, team, invitations, assignments };
+  return { form, team, invitations };
 }
 
 // Same creation sequence, but for a MongoDB deployment that doesn't support
@@ -85,7 +72,6 @@ async function buildCollaborationDocsManual(data) {
   let form = null;
   let team = null;
   let invitations = [];
-  let assignments = [];
 
   try {
     [form] = await Form.create([
@@ -107,23 +93,12 @@ async function buildCollaborationDocsManual(data) {
           status: "pending",
         }))
       );
-
-      assignments = await Assignment.create(
-        form.fields.map((f, i) => ({
-          formId: form._id,
-          fieldId: f.fieldId,
-          memberId: nonLeaderMembers[i % nonLeaderMembers.length]._id,
-          source: "leader",
-          reason: "MVP Default Assignment"
-        }))
-      );
     }
 
-    return { form, team, invitations, assignments };
+    return { form, team, invitations };
   } catch (err) {
     await Promise.allSettled(
       [
-        assignments.length && Assignment.deleteMany({ _id: { $in: assignments.map((a) => a._id) } }),
         invitations.length && Invitation.deleteMany({ _id: { $in: invitations.map((i) => i._id) } }),
         team && Team.deleteOne({ _id: team._id }),
         form && Form.deleteOne({ _id: form._id }),
