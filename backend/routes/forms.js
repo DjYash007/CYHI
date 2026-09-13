@@ -1,12 +1,11 @@
 const { Router } = require("express");
+const { getProgress, getFinalAggregation } = require("../controllers/formController");
+const { generateAiAssignments } = require("../controllers/aiController");
 const {
-  getProgress,
-  getFinalAggregation,
-  generateAiAssignments,
   getAssignmentsForReview,
   updateAssignmentByLeader,
   bulkUpdateAssignments,
-} = require("../controllers/formController");
+} = require("../controllers/assignmentController");
 
 const router = Router();
 

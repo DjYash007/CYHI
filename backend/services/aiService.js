@@ -121,7 +121,7 @@ async function callGemini(sanitizedFields, sanitizedMembers) {
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
   const systemInstruction = `You are an AI assistant for CYHI, a collaborative form-filling platform.
 Your task is to analyze form fields and team members to suggest initial field assignments.
@@ -281,10 +281,21 @@ function validateAiOutput(aiResult, form, team) {
   return assignments;
 }
 
+/**
+ * Generates and validates AI assignments for a given form and team.
+ */
+async function generateAiAssignmentsForForm(form, team) {
+  const sanitizedFields = sanitizeFormFields(form.fields);
+  const sanitizedMembers = sanitizeTeamMembers(team.members);
+  const rawAiResult = await callGemini(sanitizedFields, sanitizedMembers);
+  return validateAiOutput(rawAiResult, form, team);
+}
+
 module.exports = {
   sanitizeFormFields,
   sanitizeTeamMembers,
   callGemini,
   validateAiOutput,
   generateHeuristicAssignments,
+  generateAiAssignmentsForForm,
 };
