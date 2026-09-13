@@ -69,7 +69,7 @@ export default function MemberPage() {
     }));
 
     try {
-      const res = await fetch(`http://localhost:5000/api/join/${token}`, {
+      const res = await fetch(`http://localhost:5000/api/join/${token}/responses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ responses })
@@ -111,37 +111,43 @@ export default function MemberPage() {
         <div className="bg-white shadow sm:rounded-lg border border-gray-200">
           <div className="px-4 py-5 sm:p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
-              {invitation.fields.map((field) => (
-                <div key={field.fieldId}>
-                  <label htmlFor={field.fieldId} className="block text-sm font-medium text-gray-700">
-                    {field.label} {field.required && <span className="text-red-500">*</span>}
-                  </label>
-                  <div className="mt-1">
-                    {field.type === 'textarea' ? (
-                      <textarea
-                        id={field.fieldId}
-                        rows={4}
-                        className={`shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border ${errors[field.fieldId] ? 'border-red-300' : ''}`}
-                        placeholder={field.placeholder || ""}
-                        value={formData[field.fieldId] || ""}
-                        onChange={(e) => handleInputChange(field.fieldId, e.target.value)}
-                      />
-                    ) : (
-                      <input
-                        type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}
-                        id={field.fieldId}
-                        className={`shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border ${errors[field.fieldId] ? 'border-red-300' : ''}`}
-                        placeholder={field.placeholder || ""}
-                        value={formData[field.fieldId] || ""}
-                        onChange={(e) => handleInputChange(field.fieldId, e.target.value)}
-                      />
+              {invitation.fields && invitation.fields.length === 0 ? (
+                <div className="text-center p-4 bg-gray-100 rounded-md text-gray-600">
+                  No fields have been assigned to you yet.
+                </div>
+              ) : (
+                invitation.fields.map((field) => (
+                  <div key={field.fieldId}>
+                    <label htmlFor={field.fieldId} className="block text-sm font-medium text-gray-700">
+                      {field.label} {field.required && <span className="text-red-500">*</span>}
+                    </label>
+                    <div className="mt-1">
+                      {field.type === 'textarea' ? (
+                        <textarea
+                          id={field.fieldId}
+                          rows={4}
+                          className={`shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border ${errors[field.fieldId] ? 'border-red-300' : ''}`}
+                          placeholder={field.placeholder || ""}
+                          value={formData[field.fieldId] || ""}
+                          onChange={(e) => handleInputChange(field.fieldId, e.target.value)}
+                        />
+                      ) : (
+                        <input
+                          type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}
+                          id={field.fieldId}
+                          className={`shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border ${errors[field.fieldId] ? 'border-red-300' : ''}`}
+                          placeholder={field.placeholder || ""}
+                          value={formData[field.fieldId] || ""}
+                          onChange={(e) => handleInputChange(field.fieldId, e.target.value)}
+                        />
+                      )}
+                    </div>
+                    {errors[field.fieldId] && (
+                      <p className="mt-1 text-sm text-red-600">{errors[field.fieldId]}</p>
                     )}
                   </div>
-                  {errors[field.fieldId] && (
-                    <p className="mt-1 text-sm text-red-600">{errors[field.fieldId]}</p>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
 
               {status.message && (
                 <div className={`rounded-md p-4 ${status.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>

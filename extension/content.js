@@ -147,5 +147,51 @@ if (!window.CYHI_CONTENT_SCRIPT_LOADED) {
       }
       return false; // Synchronous response
     }
+
+    if (message?.type === "CYHI_FILL_FIELDS") {
+      try {
+        const { finalValues, fields } = message.data;
+        let filledCount = 0;
+        
+        for (const f of fields) {
+          const val = finalValues[f.fieldId];
+          if (val === undefined || val === null) continue;
+          
+          let el = null;
+          
+          // Strategy 1: Try CSS path if highly specific (not generic like "input:nth-of-type")
+          if (f.selectors.cssPath && f.selectors.cssPath.includes("#")) {
+             try { el = document.querySelector(f.selectors.cssPath); } catch (e) {}
+          }
+          
+          // Strategy 2: ID
+          if (!el && f.selectors.id) {
+             try { el = document.querySelector(f.selectors.id); } catch (e) {}
+          }
+          
+          // Strategy 3: Name
+          if (!el && f.selectors.name) {
+             try { el = document.querySelector(f.selectors.name); } catch (e) {}
+          }
+          
+          // Strategy 4: Fallback to CSS Path
+          if (!el && f.selectors.cssPath) {
+             try { el = document.querySelector(f.selectors.cssPath); } catch (e) {}
+          }
+          
+          if (el) {
+            el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            filledCount++;
+          }
+        }
+        
+        sendResponse({ ok: true, filledCount });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return false;
+    }
   });
 }

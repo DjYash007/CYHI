@@ -1,31 +1,24 @@
-# Handoff - team
-
-> Updated 2026-09-13T06:54:59+05:30 by prateekshanbhag07 (session 0913-0644, track ?)
-> Read this first. The full log is cyhi-logs/session.md.
-
 ## Current state
-End-to-end member assignment, real-time collaboration updates, and response fetching now function as required. Complete backend API architecture maps strictly to specifications.
+E2E workflow is verified. The backend progress and final endpoints correctly aggregate data. The frontend submits to the correct response endpoint. The extension correctly populates the final form fields using the CYHI_FILL_FIELDS content script logic.
 
 ## Works
-- `GET /api/join/:token`: Token correctly derives Member and Form objects, safely preventing ID spoofing.
-- `POST /api/join/:token/responses`: Strictly validates incoming assigned fields. Batch process uses `upsert` and tracks latest state flawlessly. Socket.io `field_updated` event is emitted.
-- `GET /api/forms/:formId/final`: Aggregates the absolute latest DB state accurately.
-- `GET /api/forms/lookup`: Resolves existing collaborations for the Chrome extension safely based on `sourceUrl`.
+- Form extraction
+- Collaborative assignments
+- Member response submission
+- Final data aggregation and progress tracking
+- Original web form DOM injection via extension
 
 ## Broken
-- Nothing broken on backend. Currently awaiting extension and frontend counterparts to adapt to the completed APIs.
+None right now.
 
 ## Next 3 things
-- Update extension to utilize `/api/forms/lookup` when reopening original forms.
-- Update frontend to render fields passed back from `/api/join/:token` rather than querying manually.
-- Auto-fill extension logic using `/api/forms/:formId/final` output array structure.
+- Deploy to production / verify in real conditions.
+- Design improvements for extension popup.
+- End-user documentation for CYHI features.
 
 ## Decisions (and why)
-- Chose strong token-driven member validation for `GET` and `POST` so `memberId` spoofing is impossible.
-- Decided to validate entire arrays synchronously before saving to DB, avoiding a partial write if a user sends 1 valid and 1 unauthorized field ID.
-- Switched final API to return an array of objects to better map to the extension `content.js` expected structure.
+- Fixed Progress to calculate based on actual Response existence instead of Assignment completion status to match the submission logic.
+- Implemented lookup endpoint in backend for extension to determine if it should show the final auto-fill UI.
 
 ## Don't retry
-- Do not build a second MemberResponse collection, `Response` combined with unique `formId + fieldId + memberId` is sufficient.
-- Do not add fake or redundant completion statuses. Stick to pending -> opened -> completed.
-- Do not trust client-supplied `memberId` for updates.
+- Dummy UI inputs in member view. It must render from the assignments MongoDB collection via /api/forms/:id/ai-assignments.

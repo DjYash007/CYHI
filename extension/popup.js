@@ -219,16 +219,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log("[CYHI] Collaboration created:", responseData);
 
-      // Get the REAL team ID
+      // Get the REAL team ID and form ID
       const teamId = responseData.teamId;
+      const formId = responseData.formId;
 
-      if (!teamId) {
+      if (!teamId || !formId) {
           throw new Error(
-              "Collaboration was created, but the backend did not return a teamId."
+              "Collaboration was created, but the backend did not return a teamId or formId."
           );
       }
 
       console.log("[CYHI POPUP] Team ID:", teamId);
+      
+      // STEP 1.5: Generate AI Assignments
+      console.log("[CYHI POPUP] Generating AI Assignments...");
+      sendBtn.textContent = 'Generating AI Assignments...';
+      
+      try {
+        const aiRes = await fetch(`http://localhost:5000/api/forms/${encodeURIComponent(formId)}/ai-assignments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ teamId })
+        });
+        if (!aiRes.ok) {
+            console.warn("[CYHI POPUP] AI assignment failed or returned non-OK. Continuing anyway.");
+        } else {
+            console.log("[CYHI POPUP] AI Assignments successful.");
+        }
+      } catch (aiErr) {
+        console.warn("[CYHI POPUP] AI assignment network error. Continuing anyway.", aiErr);
+      }
+
       console.log("[CYHI POPUP] Sending invitations...");
       sendBtn.textContent = 'Sending Invitations...';
 
@@ -302,6 +323,69 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // ---------- Lookup / Auto-fill Flow ----------
+  async function checkExistingCollaboration() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url) return;
+      
+      const lookupRes = await fetch(`http://localhost:5000/api/forms/lookup?sourceUrl=${encodeURIComponent(tab.url)}`);
+      if (!lookupRes.ok) return;
+      const lookupData = await lookupRes.json();
+      
+      if (lookupData.forms && lookupData.forms.length > 0) {
+        const formId = lookupData.forms[0]._id;
+        
+        const progRes = await fetch(`http://localhost:5000/api/forms/${formId}/progress`);
+        if (!progRes.ok) return;
+        const progData = await progRes.json();
+        
+        if (progData.progressPercentage === 100) {
+          document.getElementById('final-fill-section').classList.remove('hidden');
+          
+          document.getElementById('fill-form-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('fill-form-btn');
+            btn.disabled = true;
+            btn.textContent = "Fetching...";
+            
+            try {
+              const finalRes = await fetch(`http://localhost:5000/api/forms/${formId}/final`);
+              const finalData = await finalRes.json();
+              
+              if (!finalData.finalValues) throw new Error("No final values available.");
+              
+              btn.textContent = "Injecting into page...";
+              
+              const extractRes = await extractFromActiveTab();
+              if (!extractRes || !extractRes.ok) throw new Error("Could not extract target fields.");
+              
+              chrome.tabs.sendMessage(tab.id, {
+                type: "CYHI_FILL_FIELDS",
+                data: {
+                  finalValues: finalData.finalValues,
+                  fields: extractRes.data.fields
+                }
+              }, (response) => {
+                if (response && response.ok) {
+                  btn.textContent = `Success (${response.filledCount} fields)`;
+                } else {
+                  btn.textContent = "Failed to inject.";
+                }
+              });
+              
+            } catch (err) {
+              console.error(err);
+              btn.textContent = "Error";
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Lookup failed:", e);
+    }
+  }
+
   // Initial render
   renderMembers();
+  checkExistingCollaboration();
 });
