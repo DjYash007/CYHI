@@ -1,5 +1,5 @@
 const { Router } = require("express");
-const { getProgress, getFinalAggregation } = require("../controllers/formController");
+const { getProgress, getFinalAggregation, lookupForm } = require("../controllers/formController");
 const { generateAiAssignments } = require("../controllers/aiController");
 const {
   getAssignmentsForReview,
@@ -9,6 +9,7 @@ const {
 
 const router = Router();
 
+router.get("/lookup", lookupForm);
 router.get("/:formId/progress", getProgress);
 router.get("/:formId/final", getFinalAggregation);
 

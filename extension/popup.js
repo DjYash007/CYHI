@@ -1,3 +1,5 @@
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 let members = [];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -184,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log("[CYHI POPUP] Creating collaboration with payload:", payload);
 
-      const res = await fetch("http://localhost:5000/api/collaborations", {
+      const res = await fetch(`${API_BASE}/api/collaborations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -219,22 +221,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log("[CYHI] Collaboration created:", responseData);
 
-      // Get the REAL team ID
+      // Get the REAL team ID and form ID
       const teamId = responseData.teamId;
+      const formId = responseData.formId;
 
-      if (!teamId) {
+      if (!teamId || !formId) {
           throw new Error(
-              "Collaboration was created, but the backend did not return a teamId."
+              "Collaboration was created, but the backend did not return a teamId or formId."
           );
       }
 
       console.log("[CYHI POPUP] Team ID:", teamId);
+      
+      if (chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          activeCollaboration: {
+            formId: formId,
+            sourceUrl: extractedForm.sourceUrl
+          }
+        });
+      } else {
+        console.warn("CYHI: chrome.storage.local is undefined. Please reload the extension.");
+      }
+      
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id) {
+        chrome.tabs.sendMessage(tab.id, { type: "CYHI_ACTIVATE_SYNC", formId: formId }, () => {
+          if (chrome.runtime.lastError) {}
+        });
+      }
+
+      
+      // STEP 1.5: Generate AI Assignments
+      console.log("[CYHI POPUP] Generating AI Assignments...");
+      sendBtn.textContent = 'Generating AI Assignments...';
+      
+      try {
+        const aiRes = await fetch(`${API_BASE}/api/forms/${encodeURIComponent(formId)}/ai-assignments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ teamId })
+        });
+        if (!aiRes.ok) {
+            console.warn("[CYHI POPUP] AI assignment failed or returned non-OK. Continuing anyway.");
+        } else {
+            console.log("[CYHI POPUP] AI Assignments successful.");
+        }
+      } catch (aiErr) {
+        console.warn("[CYHI POPUP] AI assignment network error. Continuing anyway.", aiErr);
+      }
+
       console.log("[CYHI POPUP] Sending invitations...");
       sendBtn.textContent = 'Sending Invitations...';
 
       // STEP 2: Actually send invitations
       const sendRes = await fetch(
-          `http://localhost:5000/api/collaborations/${encodeURIComponent(teamId)}/invitations/send`,
+          `${API_BASE}/api/collaborations/${encodeURIComponent(teamId)}/invitations/send`,
           {
               method: "POST",
               headers: {
@@ -302,6 +344,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // ---------- Lookup / Auto-fill Flow ----------
+  async function checkExistingCollaboration() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url) return;
+      
+      const lookupRes = await fetch(`${API_BASE}/api/forms/lookup?sourceUrl=${encodeURIComponent(tab.url)}`);
+      if (!lookupRes.ok) return;
+      const lookupData = await lookupRes.json();
+      
+      if (lookupData.forms && lookupData.forms.length > 0) {
+        const formId = lookupData.forms[0]._id;
+        
+        if (chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({
+            activeCollaboration: {
+              formId: formId,
+              sourceUrl: tab.url
+            }
+          });
+        } else {
+          console.warn("CYHI: chrome.storage.local is undefined. Please reload the extension.");
+        }
+        
+        chrome.tabs.sendMessage(tab.id, { type: "CYHI_ACTIVATE_SYNC", formId: formId }, () => {
+          // ignore errors if content script not loaded
+          if (chrome.runtime.lastError) {}
+        });
+      }
+    } catch (e) {
+      console.warn("Lookup failed:", e);
+    }
+  }
+
   // Initial render
   renderMembers();
+  checkExistingCollaboration();
 });

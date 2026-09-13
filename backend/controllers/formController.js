@@ -16,8 +16,13 @@ async function getProgress(req, res, next) {
     if (!form) throw new ApiError(404, "Form not found.");
 
     const assignments = await Assignment.find({ formId }).lean();
+    const responses = await Response.find({ formId }).lean();
+    
+    // Create a map of memberId+fieldId to check if response exists
+    const responseKeys = new Set(responses.map(r => `${r.memberId.toString()}_${r.fieldId}`));
+
     const totalFields = assignments.length;
-    const completedFields = assignments.filter((a) => a.status === "completed").length;
+    let completedFields = 0;
 
     const memberProgress = {};
     for (const a of assignments) {
@@ -26,8 +31,11 @@ async function getProgress(req, res, next) {
         memberProgress[memberIdStr] = { total: 0, completed: 0 };
       }
       memberProgress[memberIdStr].total++;
-      if (a.status === "completed") {
+      
+      const isCompleted = responseKeys.has(`${memberIdStr}_${a.fieldId}`);
+      if (isCompleted) {
         memberProgress[memberIdStr].completed++;
+        completedFields++;
       }
     }
 
@@ -112,4 +120,20 @@ async function getFinalAggregation(req, res, next) {
   }
 }
 
-module.exports = { getProgress, getFinalAggregation };
+async function lookupForm(req, res, next) {
+  try {
+    const { sourceUrl } = req.query;
+    if (!sourceUrl) {
+      throw new ApiError(400, "sourceUrl query parameter is required.");
+    }
+    
+    // Sort by createdAt desc to get the most recent collaboration for this URL
+    const forms = await Form.find({ sourceUrl }).sort({ createdAt: -1 }).lean();
+    
+    res.json({ forms });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getProgress, getFinalAggregation, lookupForm };
