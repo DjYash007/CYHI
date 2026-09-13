@@ -231,6 +231,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log("[CYHI POPUP] Team ID:", teamId);
       
+      if (chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          activeCollaboration: {
+            formId: formId,
+            sourceUrl: extractedForm.sourceUrl
+          }
+        });
+      } else {
+        console.warn("CYHI: chrome.storage.local is undefined. Please reload the extension.");
+      }
+      
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id) {
+        chrome.tabs.sendMessage(tab.id, { type: "CYHI_ACTIVATE_SYNC", formId: formId }, () => {
+          if (chrome.runtime.lastError) {}
+        });
+      }
+
+      
       // STEP 1.5: Generate AI Assignments
       console.log("[CYHI POPUP] Generating AI Assignments...");
       sendBtn.textContent = 'Generating AI Assignments...';
@@ -336,49 +355,77 @@ document.addEventListener('DOMContentLoaded', () => {
       if (lookupData.forms && lookupData.forms.length > 0) {
         const formId = lookupData.forms[0]._id;
         
+        if (chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({
+            activeCollaboration: {
+              formId: formId,
+              sourceUrl: tab.url
+            }
+          });
+        } else {
+          console.warn("CYHI: chrome.storage.local is undefined. Please reload the extension.");
+        }
+        
+        chrome.tabs.sendMessage(tab.id, { type: "CYHI_ACTIVATE_SYNC", formId: formId }, () => {
+          // ignore errors if content script not loaded
+          if (chrome.runtime.lastError) {}
+        });
+        
         const progRes = await fetch(`http://localhost:5000/api/forms/${formId}/progress`);
         if (!progRes.ok) return;
         const progData = await progRes.json();
         
+        const fillSection = document.getElementById('final-fill-section');
+        fillSection.classList.remove('hidden');
+        
+        const headerText = fillSection.querySelector('h3');
+        const descText = fillSection.querySelector('p');
+        
         if (progData.progressPercentage === 100) {
-          document.getElementById('final-fill-section').classList.remove('hidden');
-          
-          document.getElementById('fill-form-btn').addEventListener('click', async () => {
-            const btn = document.getElementById('fill-form-btn');
-            btn.disabled = true;
-            btn.textContent = "Fetching...";
-            
-            try {
-              const finalRes = await fetch(`http://localhost:5000/api/forms/${formId}/final`);
-              const finalData = await finalRes.json();
-              
-              if (!finalData.finalValues) throw new Error("No final values available.");
-              
-              btn.textContent = "Injecting into page...";
-              
-              const extractRes = await extractFromActiveTab();
-              if (!extractRes || !extractRes.ok) throw new Error("Could not extract target fields.");
-              
-              chrome.tabs.sendMessage(tab.id, {
-                type: "CYHI_FILL_FIELDS",
-                data: {
-                  finalValues: finalData.finalValues,
-                  fields: extractRes.data.fields
-                }
-              }, (response) => {
-                if (response && response.ok) {
-                  btn.textContent = `Success (${response.filledCount} fields)`;
-                } else {
-                  btn.textContent = "Failed to inject.";
-                }
-              });
-              
-            } catch (err) {
-              console.error(err);
-              btn.textContent = "Error";
-            }
-          });
+          headerText.textContent = "Collaboration Complete";
+          descText.textContent = "All team members have submitted their responses.";
+        } else {
+          headerText.textContent = "Collaboration In Progress";
+          descText.textContent = `Progress: ${progData.progressPercentage}%. You can sync current answers.`;
         }
+        
+        const fillBtn = document.getElementById('fill-form-btn');
+        fillBtn.textContent = "Sync & Fill Form";
+        
+        fillBtn.addEventListener('click', async () => {
+          fillBtn.disabled = true;
+          fillBtn.textContent = "Fetching...";
+          
+          try {
+            const finalRes = await fetch(`http://localhost:5000/api/forms/${formId}/final`);
+            const finalData = await finalRes.json();
+            
+            if (!finalData.finalValues) throw new Error("No final values available.");
+            
+            fillBtn.textContent = "Injecting into page...";
+            
+            const extractRes = await extractFromActiveTab();
+            if (!extractRes || !extractRes.ok) throw new Error("Could not extract target fields.");
+            
+            chrome.tabs.sendMessage(tab.id, {
+              type: "CYHI_FILL_FIELDS",
+              data: {
+                finalValues: finalData.finalValues,
+                fields: extractRes.data.fields
+              }
+            }, (response) => {
+              if (response && response.ok) {
+                fillBtn.textContent = `Success (${response.filledCount} fields)`;
+              } else {
+                fillBtn.textContent = "Failed to inject.";
+              }
+            });
+            
+          } catch (err) {
+            console.error(err);
+            fillBtn.textContent = "Error";
+          }
+        });
       }
     } catch (e) {
       console.warn("Lookup failed:", e);

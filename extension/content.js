@@ -134,6 +134,77 @@ function extractFields() {
   };
 }
 
+let activeFormId = null;
+let socket = null;
+
+function fillOriginalField(f, val) {
+  if (val === undefined || val === null || val === "") return false;
+  
+  let el = null;
+  
+  // Strategy 1: Try CSS path if highly specific
+  if (f.selectors.cssPath && f.selectors.cssPath.includes("#")) {
+     try { el = document.querySelector(f.selectors.cssPath); } catch (e) {}
+  }
+  
+  // Strategy 2: ID
+  if (!el && f.selectors.id) {
+     try { el = document.querySelector(f.selectors.id); } catch (e) {}
+  }
+  
+  // Strategy 3: Name
+  if (!el && f.selectors.name) {
+     try { el = document.querySelector(f.selectors.name); } catch (e) {}
+  }
+  
+  // Strategy 4: Fallback to CSS Path
+  if (!el && f.selectors.cssPath) {
+     try { el = document.querySelector(f.selectors.cssPath); } catch (e) {}
+  }
+  
+  if (el) {
+    el.value = val;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+  return false;
+}
+
+function setupSocket(formId) {
+  if (socket) return;
+  if (typeof io === 'undefined') {
+    console.warn("CYHI: socket.io is not loaded.");
+    return;
+  }
+
+  console.log("CYHI: Connecting to socket for form", formId);
+  socket = io("http://localhost:5000");
+
+  socket.on("field_updated", (data) => {
+    if (data.formId !== formId) return;
+    
+    // On every update, extract fields to map the ID to current DOM element
+    const fields = extractFields().fields;
+    const targetField = fields.find(f => f.fieldId === data.fieldId);
+    
+    if (targetField) {
+      console.log(`CYHI: Real-time autofill for ${data.fieldId}`);
+      fillOriginalField(targetField, data.value);
+    }
+  });
+}
+
+// Auto-check on load
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+  chrome.storage.local.get(["activeCollaboration"], (res) => {
+    if (res.activeCollaboration && res.activeCollaboration.sourceUrl === location.href) {
+      activeFormId = res.activeCollaboration.formId;
+      setupSocket(activeFormId);
+    }
+  });
+}
+
 if (!window.CYHI_CONTENT_SCRIPT_LOADED) {
   window.CYHI_CONTENT_SCRIPT_LOADED = true;
 
@@ -148,46 +219,33 @@ if (!window.CYHI_CONTENT_SCRIPT_LOADED) {
       return false; // Synchronous response
     }
 
+    if (message?.type === "CYHI_ACTIVATE_SYNC") {
+      activeFormId = message.formId;
+      setupSocket(activeFormId);
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message?.type === "CYHI_FILL_FIELDS") {
       try {
         const { finalValues, fields } = message.data;
-        let filledCount = 0;
+        const filled = [];
+        const failed = [];
         
         for (const f of fields) {
           const val = finalValues[f.fieldId];
-          if (val === undefined || val === null) continue;
-          
-          let el = null;
-          
-          // Strategy 1: Try CSS path if highly specific (not generic like "input:nth-of-type")
-          if (f.selectors.cssPath && f.selectors.cssPath.includes("#")) {
-             try { el = document.querySelector(f.selectors.cssPath); } catch (e) {}
+          if (val === undefined || val === null || val === "") {
+             continue;
           }
           
-          // Strategy 2: ID
-          if (!el && f.selectors.id) {
-             try { el = document.querySelector(f.selectors.id); } catch (e) {}
-          }
-          
-          // Strategy 3: Name
-          if (!el && f.selectors.name) {
-             try { el = document.querySelector(f.selectors.name); } catch (e) {}
-          }
-          
-          // Strategy 4: Fallback to CSS Path
-          if (!el && f.selectors.cssPath) {
-             try { el = document.querySelector(f.selectors.cssPath); } catch (e) {}
-          }
-          
-          if (el) {
-            el.value = val;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            filledCount++;
+          if (fillOriginalField(f, val)) {
+            filled.push({ fieldId: f.fieldId, status: "filled" });
+          } else {
+            failed.push({ fieldId: f.fieldId, status: "not_found" });
           }
         }
         
-        sendResponse({ ok: true, filledCount });
+        sendResponse({ ok: true, filledCount: filled.length, filled, failed, success: true });
       } catch (err) {
         sendResponse({ ok: false, error: err.message });
       }
