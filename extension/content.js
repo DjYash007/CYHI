@@ -348,7 +348,7 @@ function showToast(message) {
 
 async function syncAndFillForm(formId) {
   try {
-    const finalRes = await fetch(`http://localhost:5000/api/forms/${formId}/final`);
+    const finalRes = await fetch(`https://cyhi-production-ac84.up.railway.app/api/forms/${formId}/final`);
     const finalData = await finalRes.json();
     if (!finalData.finalValues) return;
     
@@ -394,7 +394,7 @@ function setupSocket(formId) {
   }
 
   console.log("CYHI: Connecting to socket for form", formId);
-  socket = io("http://localhost:5000");
+  socket = io("https://cyhi-production-ac84.up.railway.app");
 
   socket.on("MEMBER_RESPONSE_UPDATED", (data) => {
     if (data.sessionId !== formId) return;
