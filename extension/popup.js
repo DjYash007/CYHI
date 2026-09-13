@@ -1,3 +1,5 @@
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 let members = [];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -184,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log("[CYHI POPUP] Creating collaboration with payload:", payload);
 
-      const res = await fetch("http://localhost:5000/api/collaborations", {
+      const res = await fetch(`${API_BASE}/api/collaborations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -255,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
       sendBtn.textContent = 'Generating AI Assignments...';
       
       try {
-        const aiRes = await fetch(`http://localhost:5000/api/forms/${encodeURIComponent(formId)}/ai-assignments`, {
+        const aiRes = await fetch(`${API_BASE}/api/forms/${encodeURIComponent(formId)}/ai-assignments`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ teamId })
@@ -274,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // STEP 2: Actually send invitations
       const sendRes = await fetch(
-          `http://localhost:5000/api/collaborations/${encodeURIComponent(teamId)}/invitations/send`,
+          `${API_BASE}/api/collaborations/${encodeURIComponent(teamId)}/invitations/send`,
           {
               method: "POST",
               headers: {
@@ -348,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab || !tab.url) return;
       
-      const lookupRes = await fetch(`http://localhost:5000/api/forms/lookup?sourceUrl=${encodeURIComponent(tab.url)}`);
+      const lookupRes = await fetch(`${API_BASE}/api/forms/lookup?sourceUrl=${encodeURIComponent(tab.url)}`);
       if (!lookupRes.ok) return;
       const lookupData = await lookupRes.json();
       
