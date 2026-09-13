@@ -22,7 +22,10 @@ async function getInvitation(req, res, next) {
     if (!member) throw new ApiError(404, "Member not found in team.");
 
     const assignments = await Assignment.find({ formId: form._id, memberId: invitation.memberId }).lean();
+    console.log(`[ASSIGNMENT] Found ${assignments.length} assignments for memberId ${invitation.memberId}`);
+    
     const assignedFieldIds = new Set(assignments.map(a => a.fieldId));
+    console.log(`[ASSIGNMENT] Assigned field IDs:`, Array.from(assignedFieldIds));
 
     // Get existing responses
     const responses = await Response.find({ formId: form._id, memberId: invitation.memberId }).lean();
@@ -41,6 +44,8 @@ async function getInvitation(req, res, next) {
         required: f.required,
         value: responseMap[f.fieldId] || ""
       }));
+      
+    console.log(`[MEMBER FORM] Returning ${fields.length} mapped fields to member ${member.email}`);
 
     if (invitation.status === "pending") {
       await Invitation.updateOne({ _id: invitation._id }, { status: "opened" });

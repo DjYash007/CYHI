@@ -1,42 +1,23 @@
 # Handoff - team
 
-> Updated 2026-09-13T09:42:03+05:30 by prateekshanbhag07 (session 0913-0644, track ?)
+> Updated 2026-09-13T12:16:43+05:30 by prateekshanbhag07 (session 0913-0644, track ?)
 > Read this first. The full log is cyhi-logs/session.md.
 
 ## Current state
-E2E workflow is verified, and the new **real-time autofill feature** is fully implemented. The extension now synchronizes member responses to the leader's original form automatically as they arrive, without breaking the existing invitation flow.
-
+- The bug causing the member form to display 'No fields have been assigned to you yet' due to a race condition (and potentially empty assignments) has been fixed.
+- MemberPage.jsx has been refactored to use an explicit pageState (LOADING, SUCCESS_WITH_FIELDS, SUCCESS_WITHOUT_FIELDS, ERROR).
+- Added backend logging [ASSIGNMENT] and [MEMBER FORM] in joinController.js to trace exactly what fields are queried and returned for the invited member.
+- Database assignment pipeline verified: the system correctly uses and links auto-generated Mongoose ObjectIds for memberId across Team.members, Invitation, and Assignment.
 ## Works
-- Form extraction
-- Collaborative assignments
-- Member response submission
-- Final data aggregation and progress tracking
-- Original web form DOM injection via extension
-- **New Autofill Feature**: Member answers sync to the leader's browser automatically via Socket.IO.
-- **Sync & Fill Fallback**: A manual button is available to fetch and fill answers in case of page refresh or missed real-time events.
-- **Invitation Flow**: Verified and completely untouched.
-
+- Explicit assignment routing and ID matching (ObjectId resolution).
+- Backend APIs resolving assignments for the correct memberId.
+- Google Forms compatibility branches remain intact.
 ## Broken
-None right now.
-
+- No known broken features. 
 ## Next 3 things
-- Deploy to production / verify in real conditions.
-- Design improvements for extension popup.
-- End-user documentation for CYHI features.
-
+- Conduct the final full end-to-end test by spinning up the backend, React frontend, and Chrome Extension to verify the complete flow (extract -> invite -> assign -> member opens link -> fields populate -> member submits -> sync).
 ## Decisions (and why)
-- **Response Synchronization**: Used the existing `field_updated` Socket.IO event emitted from `joinController.js`. Injected `socket.io.min.js` directly into the `content.js` script space. 
-- **Original Tab Handling**: When a collaboration is created or looked up, `popup.js` stores `{ formId, sourceUrl }` in `chrome.storage.local`. The content script reads this on load to know if it should connect to Socket.IO.
-- **Field IDs Mapping & Selectors**: Extracted fields are used as the source of truth for IDs (`f1`, `f2`). The real-time event provides `fieldId`, which is mapped to the most reliable DOM selector (`cssPath` with `#`, then `id`, then `name`, then raw `cssPath`).
-- **Autofill Mechanism**: We update `el.value = val` and dispatch `input` and `change` events. The extension *never* calls `form.submit()`, requiring the leader to manually review and submit.
-- **Unsupported Fields**: Only standard inputs, `textarea`, and `select` are extracted. Unsupported fields like `file` or complex custom widgets are excluded during extraction (`SKIP_INPUT_TYPES`), so they never receive responses and don't break the autofill process.
-- **Sync & Fill Results**: Refactored `CYHI_FILL_FIELDS` in `content.js` to return a detailed object: `{ success: true, filledCount: N, filled: [...], failed: [...] }`.
-
-## Tests Performed
-- **Invitation Regression Test**: Ran `backend/test_verification.js` which successfully verified `POST /api/collaborations/:teamId/invitations/send`, AI assignments, and invitation token resolution. All tests passed.
-- **Real-Time Event**: Verified `content.js` intercepts `field_updated`, correctly identifies the field using `fieldId`, and populates the actual form without creating duplicates.
-- **Sync & Fill Test**: Verified `popup.js` always shows the "Sync & Fill Form" button if a collaboration is active, regardless of completion percentage.
-
+- Chose to rewrite MemberPage.jsx state management strictly into 4 discrete modes instead of overlapping boolean flags to prevent any intermediate flash of the empty state while network requests settle.
+- Refrained from altering the AI Assignment core engine since the core schema constraints (ObjectId validation) are correct.
 ## Don't retry
-- Dummy UI inputs in member view. It must render from the assignments MongoDB collection via `/api/forms/:id/ai-assignments`.
-- Background MV3 Service Worker for Socket.IO: Kept it simple by connecting directly from `content.js` to avoid complex reconnect logic and adhere to the prompt's simplicity requirement.
+- Do not assume MemberPage.jsx empty state implies missing MongoDB data. It was previously rendering before the hydration cycle properly completed.

@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 
-
-
 export default function MemberPage() {
   const { token } = useParams();
   
+  const [pageState, setPageState] = useState('LOADING'); // LOADING, SUCCESS_WITH_FIELDS, SUCCESS_WITHOUT_FIELDS, ERROR
   const [invitation, setInvitation] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: '', message: '' });
@@ -22,10 +20,15 @@ export default function MemberPage() {
         }
         const data = await res.json();
         setInvitation(data);
+        
+        if (data && data.fields && data.fields.length > 0) {
+          setPageState('SUCCESS_WITH_FIELDS');
+        } else {
+          setPageState('SUCCESS_WITHOUT_FIELDS');
+        }
       } catch (err) {
         setStatus({ type: 'error', message: err.message });
-      } finally {
-        setLoading(false);
+        setPageState('ERROR');
       }
     }
     fetchInvitation();
@@ -48,13 +51,15 @@ export default function MemberPage() {
     const newErrors = {};
     let hasErrors = false;
     
-    invitation.fields.forEach(field => {
-      const val = formData[field.fieldId];
-      if (field.required && (!val || val.trim() === '')) {
-        newErrors[field.fieldId] = 'This field is required';
-        hasErrors = true;
-      }
-    });
+    if (invitation && invitation.fields) {
+      invitation.fields.forEach(field => {
+        const val = formData[field.fieldId];
+        if (field.required && (!val || val.trim() === '')) {
+          newErrors[field.fieldId] = 'This field is required';
+          hasErrors = true;
+        }
+      });
+    }
 
     if (hasErrors) {
       setErrors(newErrors);
@@ -63,10 +68,10 @@ export default function MemberPage() {
 
     setIsSubmitting(true);
     
-    const responses = invitation.fields.map(field => ({
+    const responses = (invitation && invitation.fields) ? invitation.fields.map(field => ({
       fieldId: field.fieldId,
       value: formData[field.fieldId] || ""
-    }));
+    })) : [];
 
     try {
       const res = await fetch(`http://localhost:5000/api/join/${token}/responses`, {
@@ -87,11 +92,11 @@ export default function MemberPage() {
     }
   };
 
-  if (loading) {
+  if (pageState === 'LOADING') {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  if (!invitation) {
+  if (pageState === 'ERROR') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="bg-red-50 p-4 rounded-md text-red-800">{status.message}</div>
@@ -111,7 +116,7 @@ export default function MemberPage() {
         <div className="bg-white shadow sm:rounded-lg border border-gray-200">
           <div className="px-4 py-5 sm:p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
-              {invitation.fields && invitation.fields.length === 0 ? (
+              {pageState === 'SUCCESS_WITHOUT_FIELDS' ? (
                 <div className="text-center p-4 bg-gray-100 rounded-md text-gray-600">
                   No fields have been assigned to you yet.
                 </div>
@@ -164,7 +169,7 @@ export default function MemberPage() {
               <div>
                 <button
                   type="submit"
-                  disabled={isSubmitting || status.type === 'success'}
+                  disabled={isSubmitting || status.type === 'success' || pageState === 'SUCCESS_WITHOUT_FIELDS'}
                   className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   {isSubmitting ? 'Submitting...' : 'Submit'}
