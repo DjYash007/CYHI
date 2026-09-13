@@ -17,8 +17,8 @@ async function getProgress(req, res, next) {
 
     const assignments = await Assignment.find({ formId }).lean();
     const totalFields = assignments.length;
-    const completedFields = assignments.filter(a => a.status === "completed").length;
-    
+    const completedFields = assignments.filter((a) => a.status === "completed").length;
+
     const memberProgress = {};
     for (const a of assignments) {
       const memberIdStr = a.memberId.toString();
@@ -36,7 +36,7 @@ async function getProgress(req, res, next) {
       totalFields,
       completedFields,
       progressPercentage: totalFields === 0 ? 0 : Math.round((completedFields / totalFields) * 100),
-      memberProgress
+      memberProgress,
     });
   } catch (err) {
     next(err);
@@ -53,7 +53,7 @@ async function getFinalAggregation(req, res, next) {
 
     const form = await Form.findById(formId).lean();
     if (!form) throw new ApiError(404, "Form not found.");
-    
+
     const assignments = await Assignment.find({ formId }).lean();
     const responses = await Response.find({ formId }).lean();
 
@@ -83,8 +83,8 @@ async function getFinalAggregation(req, res, next) {
         continue;
       }
 
-      const validResponses = fieldResponses.filter(r => 
-        fieldAssignments.some(a => a.memberId.toString() === r.memberId.toString())
+      const validResponses = fieldResponses.filter((r) =>
+        fieldAssignments.some((a) => a.memberId.toString() === r.memberId.toString())
       );
 
       if (validResponses.length === 0) {
@@ -105,7 +105,7 @@ async function getFinalAggregation(req, res, next) {
       finalValues,
       missingFields,
       duplicateConflicts,
-      isComplete: missingFields.length === 0
+      isComplete: missingFields.length === 0,
     });
   } catch (err) {
     next(err);
